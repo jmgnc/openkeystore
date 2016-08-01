@@ -25,8 +25,8 @@ import java.math.BigInteger;
 import java.security.GeneralSecurityException;
 import java.security.PublicKey;
 
-
 import java.security.cert.X509Certificate;
+
 import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.RSAPublicKey;
 
@@ -39,6 +39,10 @@ import java.util.regex.Pattern;
 
 import org.webpki.crypto.AlgorithmPreferences;
 import org.webpki.crypto.KeyAlgorithms;
+
+import org.webpki.json.encryption.DataEncryptionAlgorithms;
+import org.webpki.json.encryption.EncryptionCore;
+import org.webpki.json.encryption.KeyEncryptionAlgorithms;
 
 import org.webpki.json.v8dtoa.FastDtoa;
 
@@ -68,19 +72,20 @@ public class JSONObjectWriter implements Serializable
     
     int indent;
     
-    boolean pretty_print;
+    boolean prettyPrint;
 
-    boolean java_script_mode;
+    boolean javaScriptMode;
 
-    boolean html_mode;
+    boolean htmlMode;
     
-    int indent_factor;
+    int indentFactor;
 
-    static String html_variable_color = "#008000";
-    static String html_string_color   = "#0000C0";
-    static String html_property_color = "#C00000";
-    static String html_keyword_color  = "#606060";
-    static int html_indent = 4;
+    static String htmlVariableColor = "#008000";
+    static String htmlStringColor   = "#0000C0";
+    static String htmlPropertyColor = "#C00000";
+    static String htmlKeywordColor  = "#606060";
+
+    static int htmlIndent           = 4;
     
     
     /**
@@ -197,9 +202,19 @@ public class JSONObjectWriter implements Serializable
         return setString (name, value.toString ());
       }
 
+    static String bigDecimalToString (BigDecimal value, Integer decimals)
+      {
+        return (decimals == null ? value : value.setScale (decimals)).toPlainString ();
+      }
+
     public JSONObjectWriter setBigDecimal (String name, BigDecimal value) throws IOException
       {
-        return setString (name, value.toString ());
+        return setString (name, bigDecimalToString(value, null));
+      }
+
+    public JSONObjectWriter setBigDecimal (String name, BigDecimal value, Integer decimals) throws IOException
+      {
+        return setString (name, bigDecimalToString(value, decimals));
       }
 
     public JSONObjectWriter setBoolean (String name, boolean value) throws IOException
@@ -212,9 +227,9 @@ public class JSONObjectWriter implements Serializable
         return setProperty (name, new JSONValue (JSONTypes.NULL, "null"));
       }
 
-    public JSONObjectWriter setDateTime (String name, Date date_time, boolean force_utc) throws IOException
+    public JSONObjectWriter setDateTime (String name, Date dateTime, boolean forceUtc) throws IOException
       {
-        return setString (name, ISODateTime.formatDateTime (date_time, force_utc));
+        return setString (name, ISODateTime.formatDateTime (dateTime, forceUtc));
       }
 
     public JSONObjectWriter setBinary (String name, byte[] value) throws IOException 
@@ -254,12 +269,12 @@ public class JSONObjectWriter implements Serializable
         return this;
       }
 
-    JSONObjectWriter setStringArray (String name, String[] values, JSONTypes json_type) throws IOException
+    JSONObjectWriter setStringArray (String name, String[] values, JSONTypes jsonType) throws IOException
       {
         Vector<JSONValue> array = new Vector<JSONValue> ();
         for (String value : values)
           {
-            array.add (new JSONValue (json_type, value));
+            array.add (new JSONValue (jsonType, value));
           }
         return setProperty (name, new JSONValue (JSONTypes.ARRAY, array));
       }
@@ -281,10 +296,10 @@ public class JSONObjectWriter implements Serializable
 
     void setCurvePoint (BigInteger value, String name, KeyAlgorithms ec) throws IOException
       {
-        byte[] curve_point = value.toByteArray ();
-        if (curve_point.length > (ec.getPublicKeySizeInBits () + 7) / 8)
+        byte[] curvePoint = value.toByteArray ();
+        if (curvePoint.length > (ec.getPublicKeySizeInBits () + 7) / 8)
           {
-            if (curve_point[0] != 0)
+            if (curvePoint[0] != 0)
               {
                 throw new IOException ("Unexpected EC \"" + name + "\" value");
               }
@@ -292,24 +307,24 @@ public class JSONObjectWriter implements Serializable
           }
         else
           {
-            while (curve_point.length < (ec.getPublicKeySizeInBits () + 7) / 8)
+            while (curvePoint.length < (ec.getPublicKeySizeInBits () + 7) / 8)
               {
-                curve_point = ArrayUtil.add (new byte[]{0}, curve_point);
+                curvePoint = ArrayUtil.add (new byte[]{0}, curvePoint);
               }
-            setBinary (name, curve_point);
+            setBinary (name, curvePoint);
           }
       }
 
     void setCryptoBinary (BigInteger value, String name) throws IOException
       {
-        byte[] crypto_binary = value.toByteArray ();
-        if (crypto_binary[0] == 0x00)
+        byte[] cryptoBinary = value.toByteArray ();
+        if (cryptoBinary[0] == 0x00)
           {
-            byte[] wo_zero = new byte[crypto_binary.length - 1];
-            System.arraycopy (crypto_binary, 1, wo_zero, 0, wo_zero.length);
-            crypto_binary = wo_zero;
+            byte[] woZero = new byte[cryptoBinary.length - 1];
+            System.arraycopy (cryptoBinary, 1, woZero, 0, woZero.length);
+            cryptoBinary = woZero;
           }
-        setBinary (name, crypto_binary);
+        setBinary (name, cryptoBinary);
       }
 
 /**
@@ -352,7 +367,7 @@ public class JSONObjectWriter implements Serializable
     
       // Sign document
       writer.setSignature(new JSONAsymKeySigner(new AsymKeySignerInterface() {
-        @Override
+        {@literal @}Override
         public byte[] signData (byte[] data, AsymSignatureAlgorithms algorithm) throws IOException {
           try {
             return new SignatureWrapper(algorithm, privateKey).update(data).sign();
@@ -360,7 +375,7 @@ public class JSONObjectWriter implements Serializable
             throw new IOException(e);
           }
         }
-        @Override
+        {@literal @}Override
         public PublicKey getPublicKey() throws IOException {
           return publicKey;
         }
@@ -386,14 +401,14 @@ public class JSONObjectWriter implements Serializable
 */
     public JSONObjectWriter setSignature (JSONSigner signer) throws IOException
       {
-        JSONObjectWriter signature_writer = setObject (JSONSignatureDecoder.SIGNATURE_JSON);
-        signature_writer.setString (JSONSignatureDecoder.ALGORITHM_JSON,
-                                    signer.getAlgorithm ().getAlgorithmId (signer.algorithm_preferences));
+        JSONObjectWriter signatureWriter = setObject (JSONSignatureDecoder.SIGNATURE_JSON);
+        signatureWriter.setString (JSONSignatureDecoder.ALGORITHM_JSON,
+                                   signer.getAlgorithm ().getAlgorithmId (signer.algorithmPreferences));
         if (signer.keyId != null)
           {
-            signature_writer.setString (JSONSignatureDecoder.KEY_ID_JSON, signer.keyId);
+            signatureWriter.setString (JSONSignatureDecoder.KEY_ID_JSON, signer.keyId);
           }
-        signer.writeKeyData (signature_writer);
+        signer.writeKeyData (signatureWriter);
         if (signer.extensions != null)
           {
             Vector<JSONValue> array = new Vector<JSONValue> ();
@@ -401,49 +416,49 @@ public class JSONObjectWriter implements Serializable
               {
                 array.add (new JSONValue (JSONTypes.OBJECT, jor.root));
               }
-            signature_writer.setProperty (JSONSignatureDecoder.EXTENSIONS_JSON, new JSONValue (JSONTypes.ARRAY, array));
+            signatureWriter.setProperty (JSONSignatureDecoder.EXTENSIONS_JSON, new JSONValue (JSONTypes.ARRAY, array));
           }
-        signature_writer.setBinary (JSONSignatureDecoder.VALUE_JSON, 
-                                    signer.signData (signer.normalized_data = serializeJSONObject (JSONOutputFormats.NORMALIZED)));
-        return this;
-      }
-    
-    public JSONObjectWriter setPublicKey (PublicKey public_key, AlgorithmPreferences algorithm_preferences) throws IOException
-      {
-        JSONObjectWriter public_key_writer = setObject (JSONSignatureDecoder.PUBLIC_KEY_JSON);
-        KeyAlgorithms key_alg = KeyAlgorithms.getKeyAlgorithm (public_key);
-        if (key_alg.isRSAKey ())
-          {
-            public_key_writer.setString (JSONSignatureDecoder.TYPE_JSON, JSONSignatureDecoder.RSA_PUBLIC_KEY);
-            RSAPublicKey rsa_public = (RSAPublicKey)public_key;
-            public_key_writer.setCryptoBinary (rsa_public.getModulus (), JSONSignatureDecoder.N_JSON);
-            public_key_writer.setCryptoBinary (rsa_public.getPublicExponent (), JSONSignatureDecoder.E_JSON);
-          }
-        else
-          {
-            public_key_writer.setString (JSONSignatureDecoder.TYPE_JSON, JSONSignatureDecoder.EC_PUBLIC_KEY);
-            public_key_writer.setString (JSONSignatureDecoder.CURVE_JSON, key_alg.getAlgorithmId (algorithm_preferences));
-            ECPoint ec_point = ((ECPublicKey)public_key).getW ();
-            public_key_writer.setCurvePoint (ec_point.getAffineX (), JSONSignatureDecoder.X_JSON, key_alg);
-            public_key_writer.setCurvePoint (ec_point.getAffineY (), JSONSignatureDecoder.Y_JSON, key_alg);
-          }
+        signatureWriter.setBinary (JSONSignatureDecoder.VALUE_JSON, 
+                                   signer.signData (signer.normalizedData = serializeJSONObject (JSONOutputFormats.NORMALIZED)));
         return this;
       }
 
-    public JSONObjectWriter setPublicKey (PublicKey public_key) throws IOException
+    public JSONObjectWriter setPublicKey(PublicKey publicKey, AlgorithmPreferences algorithmPreferences) throws IOException {
+        setObject(JSONSignatureDecoder.PUBLIC_KEY_JSON).setCorePublicKey(publicKey, algorithmPreferences);
+        return this;
+    }
+
+    public JSONObjectWriter setCorePublicKey(PublicKey publicKey, AlgorithmPreferences algorithmPreferences) throws IOException {
+        KeyAlgorithms keyAlg = KeyAlgorithms.getKeyAlgorithm(publicKey);
+        if (keyAlg.isRSAKey()) {
+            setString(JSONSignatureDecoder.TYPE_JSON, JSONSignatureDecoder.RSA_PUBLIC_KEY);
+            RSAPublicKey rsaPublicKey = (RSAPublicKey)publicKey;
+            setCryptoBinary (rsaPublicKey.getModulus(), JSONSignatureDecoder.N_JSON);
+            setCryptoBinary (rsaPublicKey.getPublicExponent(), JSONSignatureDecoder.E_JSON);
+        } else {
+            setString(JSONSignatureDecoder.TYPE_JSON, JSONSignatureDecoder.EC_PUBLIC_KEY);
+            setString(JSONSignatureDecoder.CURVE_JSON, keyAlg.getAlgorithmId(algorithmPreferences));
+            ECPoint ecPoint = ((ECPublicKey)publicKey).getW();
+            setCurvePoint(ecPoint.getAffineX(), JSONSignatureDecoder.X_JSON, keyAlg);
+            setCurvePoint(ecPoint.getAffineY(), JSONSignatureDecoder.Y_JSON, keyAlg);
+        }
+        return this;
+    }
+
+    public JSONObjectWriter setPublicKey (PublicKey publicKey) throws IOException
       {
-        return setPublicKey (public_key, AlgorithmPreferences.JOSE_ACCEPT_PREFER);
+        return setPublicKey (publicKey, AlgorithmPreferences.JOSE_ACCEPT_PREFER);
       }
 
-    public JSONObjectWriter setCertificatePath (X509Certificate[] certificate_path) throws IOException
+    public JSONObjectWriter setCertificatePath (X509Certificate[] certificatePath) throws IOException
       {
-        X509Certificate last_certificate = null;
+        X509Certificate lastCertificate = null;
         Vector<byte[]> certificates = new Vector<byte[]> ();
-        for (X509Certificate certificate : certificate_path)
+        for (X509Certificate certificate : certificatePath)
           {
             try
               {
-                certificates.add (JSONSignatureDecoder.pathCheck (last_certificate, last_certificate = certificate).getEncoded ());
+                certificates.add (JSONSignatureDecoder.pathCheck (lastCertificate, lastCertificate = certificate).getEncoded ());
               }
             catch (GeneralSecurityException e)
               {
@@ -454,39 +469,106 @@ public class JSONObjectWriter implements Serializable
         return this;
       }
 
+    private JSONObjectWriter encryptData(byte[] unencryptedData,
+                                         DataEncryptionAlgorithms dataEncryptionAlgorithm,
+                                         String keyId,
+                                         byte[] dataEncryptionKey,
+                                         JSONObjectWriter encryptedKey)
+    throws IOException, GeneralSecurityException {
+        byte[] authenticatedData = null;
+        if (encryptedKey == null) {
+            authenticatedData = dataEncryptionAlgorithm.toString().getBytes("UTF-8");
+            if (keyId != null) {
+                setString(JSONSignatureDecoder.KEY_ID_JSON, keyId);
+            }
+        } else {
+            setObject(JSONDecryptionDecoder.ENCRYPTED_KEY_JSON, encryptedKey);
+            authenticatedData = encryptedKey.serializeJSONObject(JSONOutputFormats.NORMALIZED);
+        }
+        EncryptionCore.AuthEncResult result =
+                EncryptionCore.contentEncryption(dataEncryptionAlgorithm,
+                                                 dataEncryptionKey,
+                                                 unencryptedData,
+                                                 authenticatedData);
+        setString(JSONSignatureDecoder.ALGORITHM_JSON, dataEncryptionAlgorithm.toString());
+        setBinary(JSONDecryptionDecoder.IV_JSON, result.getIv());
+        setBinary(JSONDecryptionDecoder.TAG_JSON, result.getTag());
+        setBinary(JSONDecryptionDecoder.CIPHER_TEXT_JSON, result.getCipherText());
+        return this;
+    }
+
+    public JSONObjectWriter setEncryptionObject(byte[] unencryptedData,
+                                                DataEncryptionAlgorithms dataEncryptionAlgorithm,
+                                                PublicKey keyEncryptionKey,
+                                                KeyEncryptionAlgorithms keyEncryptionAlgorithm) 
+    throws IOException, GeneralSecurityException {
+        JSONObjectWriter encryptedKey = new JSONObjectWriter()
+            .setString(JSONSignatureDecoder.ALGORITHM_JSON, keyEncryptionAlgorithm.toString());
+        byte[] dataEncryptionKey = null;
+        encryptedKey.setPublicKey(keyEncryptionKey, AlgorithmPreferences.JOSE);
+        if (keyEncryptionAlgorithm.isRsa()) {
+            dataEncryptionKey = EncryptionCore.generateDataEncryptionKey(dataEncryptionAlgorithm);
+            encryptedKey.setBinary(JSONDecryptionDecoder.CIPHER_TEXT_JSON,
+                                   EncryptionCore.rsaEncryptKey(keyEncryptionAlgorithm,
+                                                                dataEncryptionKey,
+                                                                keyEncryptionKey));
+        } else {
+            EncryptionCore.EcdhSenderResult result =
+                EncryptionCore.senderKeyAgreement(keyEncryptionAlgorithm,
+                                                  dataEncryptionAlgorithm,
+                                                  keyEncryptionKey);
+            dataEncryptionKey = result.getSharedSecret();
+            encryptedKey.setObject(JSONDecryptionDecoder.EPHEMERAL_KEY_JSON)
+                .setCorePublicKey(result.getEphemeralKey(), AlgorithmPreferences.JOSE);
+        }
+        return encryptData(unencryptedData,
+                           dataEncryptionAlgorithm,
+                           null,
+                           dataEncryptionKey,
+                           encryptedKey);
+    }
+
+    public JSONObjectWriter setEncryptionObject(byte[] unencryptedData,
+                                                DataEncryptionAlgorithms dataEncryptionAlgorithm,
+                                                String keyId,
+                                                byte[] dataEncryptionKey)
+    throws IOException, GeneralSecurityException {
+        return encryptData(unencryptedData, dataEncryptionAlgorithm, keyId, dataEncryptionKey, null);
+    }
+
     void newLine ()
       {
-        if (pretty_print)
+        if (prettyPrint)
           {
-            buffer.append (html_mode ? "<br>" : "\n");
+            buffer.append (htmlMode ? "<br>" : "\n");
           }
       }
 
     void indentLine ()
       {
-        indent += indent_factor;
+        indent += indentFactor;
       }
 
     void undentLine ()
       {
-        indent -= indent_factor;
+        indent -= indentFactor;
       }
 
     @SuppressWarnings("unchecked")
-    void printOneElement (JSONValue json_value)
+    void printOneElement (JSONValue jsonValue)
       {
-        switch (json_value.type)
+        switch (jsonValue.type)
           {
             case ARRAY:
-              printArray ((Vector<JSONValue>) json_value.value, false);
+              printArray ((Vector<JSONValue>) jsonValue.value);
               break;
   
             case OBJECT:
-              printObject ((JSONObject) json_value.value);
+              printObject ((JSONObject) jsonValue.value);
               break;
   
             default:
-              printSimpleValue (json_value, false);
+              printSimpleValue (jsonValue, false);
           }
       }
 
@@ -511,7 +593,7 @@ public class JSONObjectWriter implements Serializable
         boolean next = false;
         for (String property : object.properties.keySet ())
           {
-            JSONValue json_value = object.properties.get (property);
+            JSONValue jsonValue = object.properties.get (property);
             if (next)
               {
                 buffer.append (',');
@@ -519,35 +601,31 @@ public class JSONObjectWriter implements Serializable
             newLine ();
             next = true;
             printProperty (property);
-            printOneElement (json_value);
+            printOneElement (jsonValue);
           }
         newUndentSpace ();
         buffer.append ('}');
       }
 
     @SuppressWarnings("unchecked")
-    void printArray (Vector<JSONValue> array, boolean array_flag)
+    void printArray (Vector<JSONValue> array)
       {
-        if (array_flag) 
-          {
-            newIndentSpace ();
-          }
          buffer.append ('[');
          if (!array.isEmpty ())
           {
             boolean mixed = false;
-            JSONTypes first_type = array.firstElement ().type;
-            for (JSONValue json_value : array)
+            JSONTypes firstType = array.firstElement ().type;
+            for (JSONValue jsonValue : array)
               {
-                if (first_type.complex != json_value.type.complex ||
-                    (first_type.complex && first_type != json_value.type))
+                if (firstType.complex != jsonValue.type.complex ||
+                    (firstType.complex && firstType != jsonValue.type))
                     
                   {
                     mixed = true;
                     break;
                   }
               }
-            if (mixed || (array.size() == 1 && first_type == JSONTypes.OBJECT))
+            if (mixed || (array.size() == 1 && firstType == JSONTypes.OBJECT))
               {
                 boolean next = false;
                 for (JSONValue value : array)
@@ -563,18 +641,17 @@ public class JSONObjectWriter implements Serializable
                     printOneElement (value);
                   }
               }
-            else if (first_type == JSONTypes.OBJECT)
+            else if (firstType == JSONTypes.OBJECT)
               {
                 printArrayObjects (array);
               }
-            else if (first_type == JSONTypes.ARRAY)
+            else if (firstType == JSONTypes.ARRAY)
               {
                 newIndentSpace ();
                 boolean next = false;
                 for (JSONValue value : array)
                   {
-                    Vector<JSONValue> sub_array = (Vector<JSONValue>) value.value;
-                    boolean extra_pretty = sub_array.isEmpty () || !sub_array.firstElement ().type.complex;
+                    Vector<JSONValue> subArray = (Vector<JSONValue>) value.value;
                     if (next)
                       {
                         buffer.append (',');
@@ -583,15 +660,7 @@ public class JSONObjectWriter implements Serializable
                       {
                         next = true;
                       }
-                    if (extra_pretty)
-                      {
-                        newIndentSpace ();
-                      }
-                    printArray (sub_array, true);
-                    if (extra_pretty)
-                      {
-                        undentLine ();
-                      }
+                    printArray (subArray);
                   }
                 newUndentSpace ();
               }
@@ -599,10 +668,6 @@ public class JSONObjectWriter implements Serializable
               {
                 printArraySimple (array);
               }
-          }
-        if (array_flag) 
-          {
-            newUndentSpace ();
           }
         buffer.append (']');
       }
@@ -614,9 +679,9 @@ public class JSONObjectWriter implements Serializable
           {
             i += ((String)value.value).length ();
           }
-        boolean broken_lines = i > 100;
+        boolean brokenLines = i > 100;
         boolean next = false;
-        if (broken_lines)
+        if (brokenLines)
           {
             indentLine ();
             newLine ();
@@ -626,19 +691,19 @@ public class JSONObjectWriter implements Serializable
             if (next)
               {
                 buffer.append (',');
-                if (broken_lines)
+                if (brokenLines)
                   {
                     newLine ();
                   }
               }
-            if (broken_lines)
+            if (brokenLines)
               {
                 spaceOut ();
               }
             printSimpleValue (value, false);
             next = true;
           }
-        if (broken_lines)
+        if (brokenLines)
           {
             newUndentSpace ();
           }
@@ -668,25 +733,24 @@ public class JSONObjectWriter implements Serializable
         String string = (String) value.value;
         if (value.type != JSONTypes.STRING)
           {
-            if (html_mode)
+            if (htmlMode)
               {
                 buffer.append ("<span style=\"color:")
-                      .append (html_variable_color)
+                      .append (htmlVariableColor)
                       .append ("\">");
               }
             buffer.append (string);
-            if (html_mode)
+            if (htmlMode)
               {
                 buffer.append ("</span>");
               }
             return;
           }
-        boolean quoted = !property || !java_script_mode || !pretty_print ||
-                         !JS_ID_PATTERN.matcher (string).matches ();
-        if (html_mode)
+        boolean quoted = !property || !javaScriptMode || !JS_ID_PATTERN.matcher (string).matches ();
+        if (htmlMode)
           {
             buffer.append ("&quot;<span style=\"color:")
-                  .append (property ? string.startsWith ("@") ? html_keyword_color : html_property_color : html_string_color)
+                  .append (property ? string.startsWith ("@") ? htmlKeywordColor : htmlPropertyColor : htmlStringColor)
                   .append ("\">");
           }
         else if (quoted)
@@ -695,7 +759,7 @@ public class JSONObjectWriter implements Serializable
           }
         for (char c : string.toCharArray ())
           {
-            if (html_mode)
+            if (htmlMode)
               {
                 switch (c)
                   {
@@ -723,12 +787,6 @@ public class JSONObjectWriter implements Serializable
             switch (c)
               {
                 case '\\':
-                  if (java_script_mode)
-                    {
-                      // JS escaping need \\\\ in order to produce a JSON \\
-                      buffer.append ('\\');
-                    }
-
                 case '"':
                   escapeCharacter (c);
                   break;
@@ -752,12 +810,26 @@ public class JSONObjectWriter implements Serializable
                 case '\t':
                   escapeCharacter ('t');
                   break;
-                  
-                case '\'':
-                  if (java_script_mode && !pretty_print)
+
+                case '&':
+                  if (javaScriptMode)
                     {
-                      // Since we assumed that the JSON object was enclosed between '' we need to escape ' as well
-                      buffer.append ('\\');
+                      buffer.append ("\\u0026");
+                      break;
+                    }
+
+                case '>':
+                  if (javaScriptMode)
+                    {
+                      buffer.append ("\\u003e");
+                      break;
+                    }
+
+                case '<':
+                  if (javaScriptMode)
+                    {
+                      buffer.append ("\\u003c");
+                      break;
                     }
 
                 default:
@@ -775,7 +847,7 @@ public class JSONObjectWriter implements Serializable
                   buffer.append (c);
               }
           }
-        if (html_mode)
+        if (htmlMode)
           {
             buffer.append ("</span>&quot;");
           }
@@ -787,18 +859,14 @@ public class JSONObjectWriter implements Serializable
 
     void escapeCharacter (char c)
       {
-        if (java_script_mode)
-          {
-            buffer.append ('\\');
-          }
         buffer.append ('\\').append (c);
       }
 
     void singleSpace ()
       {
-        if (pretty_print)
+        if (prettyPrint)
           {
-            if (html_mode)
+            if (htmlMode)
               {
                 buffer.append ("&nbsp;");
               }
@@ -826,33 +894,22 @@ public class JSONObjectWriter implements Serializable
       }
 
     @SuppressWarnings("unchecked")
-    public byte[] serializeJSONObject (JSONOutputFormats output_format) throws IOException
+    public byte[] serializeJSONObject (JSONOutputFormats outputFormat) throws IOException
       {
         buffer = new StringBuffer ();
-        indent_factor = output_format == JSONOutputFormats.PRETTY_HTML ? html_indent : STANDARD_INDENT;
-        pretty_print = output_format.pretty;
-        java_script_mode = output_format.javascript;
-        html_mode = output_format.html;
-        if (java_script_mode && !pretty_print)
-          {
-            buffer.append ('\'');
-          }
+        indentFactor = outputFormat == JSONOutputFormats.PRETTY_HTML ? htmlIndent : STANDARD_INDENT;
+        prettyPrint = outputFormat.pretty;
+        javaScriptMode = outputFormat.javascript;
+        htmlMode = outputFormat.html;
         if (root.properties.containsKey (null))
           {
-            printArray ((Vector<JSONValue>)root.properties.get (null).value, false);
+            printArray ((Vector<JSONValue>)root.properties.get (null).value);
           }
         else
           {
             printObject (root);
           }
-        if (java_script_mode)
-          {
-            if (!pretty_print)
-              {
-                buffer.append ('\'');
-              }
-          }
-        else if (pretty_print)
+        if (!javaScriptMode)
           {
             newLine ();
           }

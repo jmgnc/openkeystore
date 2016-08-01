@@ -22,6 +22,7 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
+import java.security.KeyPair;
 import java.security.PublicKey;
 
 import java.security.cert.X509Certificate;
@@ -48,7 +49,7 @@ public class JSONObjectReader implements Serializable, Cloneable
     private static final long serialVersionUID = 1L;
 
     static final Pattern DECIMAL_PATTERN = Pattern.compile ("-?([1-9][0-9]*|0)[\\.][0-9]+");
-    static final Pattern INTEGER_PATTERN = Pattern.compile ("-?[0-9]+");
+    static final Pattern INTEGER_PATTERN = Pattern.compile ("-?[1-9][0-9]*|0");
 
     JSONObject root;
 
@@ -100,19 +101,18 @@ public class JSONObjectReader implements Serializable, Cloneable
 
     static long parseLong (String value) throws IOException
       {
-        double number = Double.valueOf (value);
-        if (Math.abs (number) > JSONObjectWriter.MAX_SAFE_INTEGER)
+        if (INTEGER_PATTERN.matcher (value).matches ())
           {
-            throw new IOException ("Integer values must not exceeed " + 
-                                   JSONObjectWriter.MAX_SAFE_INTEGER  +
-                                   ", found: " + value);
+            double number = Double.valueOf (value);
+            if (Math.abs (number) > JSONObjectWriter.MAX_SAFE_INTEGER)
+              {
+                throw new IOException ("Integer values must not exceeed " + 
+                                       JSONObjectWriter.MAX_SAFE_INTEGER  +
+                                       ", found: " + value);
+              }
+            return (long) number;
           }
-        long longValue = (long) number;
-        if (longValue != number)
-          {
-            throw new IOException ("Value is not an integer: " + value);
-          }
-        return longValue;
+        throw new IOException ("Value is not an integer: " + value);
       }
 
     static int parseInt (String value) throws IOException
@@ -164,12 +164,17 @@ public class JSONObjectReader implements Serializable, Cloneable
         throw new IOException ("Malformed \"BigInteger\": " + value);
       }
 
-    static BigDecimal parseBigDecimal (String value) throws IOException
+    static BigDecimal parseBigDecimal (String value, Integer decimals) throws IOException
       {
         if (INTEGER_PATTERN.matcher (value).matches () ||
             DECIMAL_PATTERN.matcher (value).matches ())
           {
-            return new BigDecimal (value);
+            BigDecimal parsed = new BigDecimal (value);
+            if (decimals != null && parsed.scale () != decimals)
+              {
+                throw new IOException ("Incorrect number of decimals in \"BigDecimal\": " + parsed.scale ());
+              }
+            return parsed;
           }
         throw new IOException ("Malformed \"BigDecimal\": " + value);
       }
@@ -181,7 +186,12 @@ public class JSONObjectReader implements Serializable, Cloneable
 
     public BigDecimal getBigDecimal (String name) throws IOException
       {
-        return parseBigDecimal (getString (name));
+        return parseBigDecimal (getString (name), null);
+      }
+
+    public BigDecimal getBigDecimal (String name, Integer decimals) throws IOException
+      {
+        return parseBigDecimal (getString (name), decimals);
       }
 
     @SuppressWarnings("unchecked")
@@ -305,13 +315,45 @@ public class JSONObjectReader implements Serializable, Cloneable
  
     public PublicKey getPublicKey (AlgorithmPreferences algorithmPreferences) throws IOException
       {
-        return JSONSignatureDecoder.getPublicKey (this, algorithmPreferences);
+        return getObject(JSONSignatureDecoder.PUBLIC_KEY_JSON).getCorePublicKey(algorithmPreferences);
       }
 
     public PublicKey getPublicKey () throws IOException
       {
-        return JSONSignatureDecoder.getPublicKey (this, AlgorithmPreferences.JOSE_ACCEPT_PREFER);
+        return getPublicKey (AlgorithmPreferences.JOSE_ACCEPT_PREFER);
       }
+
+    void clearReadFlags() {
+        for (JSONValue value : root.properties.values()) {
+            value.readFlag = false;
+        }
+    }
+
+    public PublicKey getCorePublicKey(AlgorithmPreferences algorithmPreferences) throws IOException {
+        clearReadFlags();
+        PublicKey publicKey = JSONSignatureDecoder.decodePublicKey(this,
+                                                                   algorithmPreferences, 
+                                                                   JSONSignatureDecoder.TYPE_JSON,
+                                                                   JSONSignatureDecoder.CURVE_JSON);
+        checkForUnread ();
+        return publicKey;
+    }
+
+    public PublicKey getPublicKeyFromJwk() throws IOException {
+        return JSONSignatureDecoder.decodePublicKey(this,
+                                                    AlgorithmPreferences.JOSE, 
+                                                    JSONSignatureDecoder.JWK_KTY_JSON,
+                                                    JSONSignatureDecoder.JWK_CRV_JSON);
+    }
+
+    public KeyPair getKeyPairFromJwk() throws IOException {
+        PublicKey publicKey = getPublicKeyFromJwk();
+        return new KeyPair(publicKey, JSONSignatureDecoder.decodeJwkPrivateKey(this, publicKey));
+    }
+
+    public JSONDecryptionDecoder getEncryptionObject() throws IOException {
+        return new JSONDecryptionDecoder(this);
+    }
 
     public X509Certificate[] getCertificatePath () throws IOException
       {

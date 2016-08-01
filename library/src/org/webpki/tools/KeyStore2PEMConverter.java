@@ -21,11 +21,13 @@ import java.io.FileOutputStream;
 import java.util.Enumeration;
 
 import java.security.KeyStore;
+import java.security.PublicKey;
 
 import java.security.cert.Certificate;
 
 import org.webpki.crypto.KeyStoreReader;
 import org.webpki.crypto.CustomCryptoProvider;
+
 import org.webpki.util.Base64;
 
 
@@ -34,42 +36,42 @@ public class KeyStore2PEMConverter
     private static void fail ()
       {
         System.out.println (KeyStore2PEMConverter.class.getName () + "  keystore-file password PEM-file qualifier\n" +
-                           "   qualifier = public | private | composite | all");
+                           "   qualifier = [public private certificate trust]");
         System.exit (3);
       }
 
     public static void main (String argv[]) throws Exception
       {
-        if (argv.length != 4)
+        if (argv.length < 4)
           {
             fail ();
           }
         boolean private_key = false;
         boolean public_key = false;
-        boolean other_key = false;
-        if (argv[3].equals ("public"))
-          {
-            public_key = true;
-          }
-        else if (argv[3].equals ("private"))
-          {
-            private_key = true;
-          }
-        else if (argv[3].equals ("composite"))
-          {
-            public_key = true;
-            private_key = true;
-          }
-        else if (argv[3].equals ("all"))
-          {
-            public_key = true;
-            private_key = true;
-            other_key = true;
-          }
-        else
-          {
-            fail ();
-          }
+        boolean certificate = false;
+        boolean trust = false;
+        for (int i = 3; i < argv.length; i++) {
+          if (argv[i].equals ("public"))
+            {
+              public_key = true;
+            }
+          else if (argv[i].equals ("private"))
+            {
+              private_key = true;
+            }
+          else if (argv[i].equals ("certificate"))
+            {
+              certificate = true;
+            }
+          else if (argv[i].equals ("trust"))
+            {
+              trust = true;
+            }
+          else
+            {
+              fail ();
+            }
+        }
         CustomCryptoProvider.forcedLoad (true);
         KeyStore ks = KeyStoreReader.loadKeyStore (argv[0], argv[1]);
         FileOutputStream fis = new FileOutputStream (argv[2]);
@@ -83,14 +85,18 @@ public class KeyStore2PEMConverter
                   {
                     writeObject (fis, "PRIVATE KEY", ks.getKey (alias, argv[1].toCharArray ()).getEncoded ());
                   }
-                if (public_key) for (Certificate cert : ks.getCertificateChain (alias))
+                if (certificate) for (Certificate cert : ks.getCertificateChain (alias))
                   {
                     writeCert (fis, cert);
+                  }
+                if (public_key)
+                  {
+                    writeObject (fis, "PUBLIC KEY", ks.getCertificateChain (alias)[0].getPublicKey ().getEncoded ());
                   }
               }
             else if (ks.isCertificateEntry (alias))
               {
-                if (other_key)
+                if (trust)
                   {
                     writeCert (fis, ks.getCertificate (alias));
                   }
