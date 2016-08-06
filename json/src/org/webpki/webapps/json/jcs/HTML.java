@@ -37,7 +37,7 @@ public class HTML
     static final String KG2_DEVID_BASE      = "Field";
     static final String HOME = "><a href=\"home\" title=\"Home\" style=\"position:absolute;top:15px;right:15px;z-index:5;visibility:visible\">Home</a";
 
-    static final String STATIC_BOX = "word-wrap:break-word;width:800pt;background:#F8F8F8;";
+    static final String STATIC_BOX = "word-break:break-all;width:800pt;background:#F8F8F8;";
     static final String COMMON_BOX = "border-width:1px;border-style:solid;border-color:grey;padding:10pt;box-shadow:3pt 3pt 3pt #D0D0D0";
 
     static final String TEXT_BOX   = "background:#FFFFD0;width:805pt;";
@@ -187,7 +187,7 @@ public class HTML
                    "<tr><td>&nbsp;</td></tr>" +
                    "<tr><td align=\"left\"><a href=\"" + baseurl + "/webcrypto\">Create a JCS using WebCrypto</a></td></tr>" +
                    "<tr><td>&nbsp;</td></tr>" +
-                   "<tr><td align=\"left\"><a target=\"_blank\" href=\"https://cyberphone.github.io/openkeystore/resources/docs/jcs.html\">JCS Documentation</a></td></tr>" +
+                   "<tr><td align=\"left\"><a target=\"_blank\" href=\"https://cyberphone.github.io/doc/security/jcs.html\">JCS Documentation</a></td></tr>" +
                  "</table></td></tr>"));
       }
 
